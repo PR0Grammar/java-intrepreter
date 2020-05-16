@@ -2,9 +2,14 @@
 
 This class is a top-down, recursive-descent parser for the following syntactic categories:
 
-<exp> --> <int> | <float> | <floatE> | <floatF> | "nil" | "(" <fun exp> ")" | "if" <exp> "then" <exp> "else" <exp>
+<fun def list> --> <fun def> | <fun def> <fun def list>
+<fun def> --> <header> "{" <exp> "}" 
+<header> --> <fun name> <parameter list>
+<fun name> --> <id> 
+<parameter list> --> epsilon | <id> <parameter list> 
+<exp> --> <id> | <int> | <foat> | <floatE> | <floatF> | "nil" | "(" <fun exp> ")" | "if" <exp> "then" <exp> "else" <exp>
 <fun exp> --> <fun op> <exp list>
-<fun op> -->  "pair" | "first" | "second" | <arith op> | <bool op> | <comp op>
+<fun op> --> <id> | "pair" | "first" | "second" | <arith op> | <bool op> | <comp op>
 <arith op> --> + | - | * | /
 <bool op> --> "or" | "and" | "not"
 <comp op> --> "<" | "<=" | ">" | ">=" | "="
@@ -39,15 +44,104 @@ import java.util.*;
 
 public abstract class Parser extends LexAnalyzer
 {
+	static final EmptyParameterList emptyParameterList = new EmptyParameterList();
 	static final Nil nil = new Nil();
 	static final EmptyExpList emptyExpList = new EmptyExpList();
 	static boolean syntaxErrorFound = false;
+	static HashMap<String, FunDef> funcMap = new HashMap<>();
 
-	public static Exp exp()	
+	public static FunDefList funDefList()
+	// <fun def list> --> <fun def> | <fun def> <fun def list>
+		
+	{
+		FunDef funDef = funDef();
+		if ( state == State.Id ) // Function name is present.
+		{
+			FunDefList funDefList = funDefList();
+			return new MultipleFunDef(funDef, funDefList);
+		}
+		else
+			return funDef;
+	}
+	
+	public static FunDef funDef()
+	
+	// <fun def> --> <header> "{" <exp> "}"
+	
+	{
+		if ( state == State.Id ) // Function name is present.
+		{
+			Header header = header();
+			if (state == State.LBrace )
+			{
+				getToken();
+				Exp exp = exp();
+				if ( state == State.RBrace )
+				{
+					getToken();
+					FunDef fd = new FunDef(header, exp);
+					funcMap.put(header.funName, fd);
+					return fd;
+				}
+				else
+				{
+					errorMsg(2);
+					return null;
+				}
+			}
+			else
+			{
+				errorMsg(1);
+				return null;
+			}
+		}
+		else
+		{
+			errorMsg(0);
+			return null;
+		}
+	}
+
+	public static Header header()
+	
+	// <header> --> <fun name> <parameter list>
+	// <fun name> --> <id>
+	
+	{
+		String funName = t;
+		getToken();
+		ParameterList parameterList = parameterList();
+		return new Header(funName, parameterList);
+	}
+
+	public static ParameterList parameterList()
+	
+	// <parameter list> --> epsilon | <id> <parameter list>
+	
+	{
+		if ( state == State.Id )
+		{
+			String id = t;
+			getToken();
+			ParameterList parameterList = parameterList();
+			return new NonEmptyParameterList(id, parameterList);
+		}
+		else
+			return emptyParameterList; // emptyParameterList is a static constant object.
+	}
+	
+	public static Exp exp()
+	
 	// <exp> --> <id> | <int> | <float> | <floatE> | <floatF> | "nil" | "(" <fun exp> ")" | "if" <exp> "then" <exp> "else" <exp>
+	
 	{
 		switch ( state )
 		{
+			case Id:
+				Id id = new Id(t);
+				getToken();				
+				return id;
+				
 			case Int:
 				Int intElem = new Int(Integer.parseInt(t));
 				getToken();
@@ -111,8 +205,14 @@ public abstract class Parser extends LexAnalyzer
 	// <comp op> --> "<" | "<=" | ">" | ">=" | "="
 	
 	{	
-
-		if ( state.isPairOp() || state.isArithOp() || state.isBoolOp() || state.isCompOp() )
+		if ( state == State.Id )
+		{
+			Id id = new Id(t);
+			getToken();
+			ExpList expList = expList();
+			return new FunCall(id, expList);
+		}
+		else if ( state.isPairOp() || state.isArithOp() || state.isBoolOp() || state.isCompOp() )
 		{
 			State opState = state;
 			getToken();
@@ -175,14 +275,14 @@ public abstract class Parser extends LexAnalyzer
 
 		switch( i )
 		{
-		case 0:	msg = "exp expected"; break;
+		case 0:	msg = "fun name expected"; break;
 		case 1:	msg = "{ expected"; break;							
 		case 2: msg = "} expected"; break;
 		case 3: msg = ") expected"; break;
 		case 4:	msg = "then expected"; break;				
 		case 5:	msg = "else expected"; break;				
-		case 6:	msg = "int, float, nil, (, or if expected"; break;
-		case 7:	msg = "pair, first, second, arith op, bool op, or comp op expected"; break;
+		case 6:	msg = "id, int, float, nil, (, or if expected"; break;
+		case 7:	msg = "fun name, pair, first, second, arith op, bool op, or comp op expected"; break;
 		}
 
 		displayln(msg);
@@ -198,10 +298,12 @@ public abstract class Parser extends LexAnalyzer
 		setLex();
 
 		getToken();
-        ExpList el = expList();
-        
+		FunDefList funDefList = funDefList();
 		if ( ! t.isEmpty() )
 			errorMsg(0);
+		else if ( ! syntaxErrorFound )
+			funDefList.printParseTree("");
+		
 		closeIO();
 	}
 }

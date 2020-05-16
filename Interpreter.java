@@ -18,8 +18,7 @@ public abstract class Interpreter extends Parser
 		setLex();
 		
 		getToken();
-        ExpList el = expList();
-        
+		FunDefList funDefList = funDefList();
 		if ( ! t.isEmpty() )
 			errorMsg(0);
 		else if ( ! syntaxErrorFound )
@@ -27,8 +26,7 @@ public abstract class Interpreter extends Parser
 			closeIO();
 			setIO( argv[2], argv[3] );
 			getToken();
-            Exp exp = exp();
-            
+			Exp exp = exp();
 			if ( ! t.isEmpty() )
 				displayln(t + "  -- unexpected symbol");
 			else if ( ! syntaxErrorFound )
